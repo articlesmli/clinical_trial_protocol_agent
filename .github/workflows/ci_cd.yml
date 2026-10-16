@@ -19,16 +19,11 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install Dependencies
-        run: |
-          python -m venv .venv
-          source .venv/bin/activate
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run Agent Pipeline Test (Mock/Dry Run)
+      - name: Install Dependencies & Run Test Pipeline
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          source .venv/bin/activate
-          python main.py --pdf protocols/trial_protocol_104xb.pdf
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          .venv/bin/python main.py --pdf protocols/trial_protocol_104xb.pdf
