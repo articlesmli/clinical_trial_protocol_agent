@@ -23,7 +23,9 @@ clinical_trial_protocol_agent/          # Project root folder & Virtual Environm
   ├── Dockerfile                        # Multi-stage containerization blueprint for production deployment
   ├── requirements.txt                  # Project dependencies with version pinning & sentence-transformers
   ├── main.py                           # Entry point script to run the agent pipeline
+  ├── LICENSE                           # MIT License file
   └── README.md                         # Project documentation
+
 
 ```
 
@@ -32,11 +34,23 @@ clinical_trial_protocol_agent/          # Project root folder & Virtual Environm
 ## Key Components
 
 * **`src/schemas.py`**: Defines the shared state schema (`ProtocolState`) and structured Pydantic models (`CriteriaExtractionOutput`) for reliable LLM parsing.
+
+
 * **`src/tools.py`**: Implements real PDF extraction via `pypdf`, criteria extraction using Anthropic's `claude-sonnet-5-5` model via JSON schema structured outputs, and semantic similarity search over historical trial precedents using `ChromaDB`, Hugging Face embeddings, and `sentence-transformers`.
+
+
 * **`src/workflow.py`**: Configures the stateful LangGraph workflow, orchestrating sequential execution nodes from parsing to vector retrieval and compliance reporting.
+
+
 * **`Dockerfile`**: Provides a secure, optimized multi-stage Python 3.10 runtime container image with non-privileged user execution.
+
+
 * **`.github/workflows/ci-cd.yml`**: Automates multi-stage build tests and validation checks via GitHub Actions.
+
+
 * **`main.py`**: The clean executable command-line interface entry point that sets up the graph and prints the final clinical compliance report.
+
+
 
 ---
 
@@ -49,12 +63,14 @@ python3.10 -m venv .
 source bin/activate  # On Windows: Scripts\activate
 pip install --upgrade pip
 
+
 ```
 
 ### 2. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
+
 
 ```
 
@@ -66,12 +82,14 @@ Create a root **`.env`** file and add your credentials:
 ANTHROPIC_API_KEY=sk-ant-usr-...
 HF_TOKEN=hf_your_hugging_face_token_here
 
+
 ```
 
 ### 4. Run the Agent Locally
 
 ```bash
 python main.py --pdf protocols/trial_protocol_104xb.pdf
+
 
 ```
 
@@ -86,6 +104,7 @@ To run the agent fully sandboxed inside a secure **Docker container**:
 ```bash
 docker build -t clinical-trial-agent .
 
+
 ```
 
 ### 2. Run the Containerized Agent
@@ -93,4 +112,12 @@ docker build -t clinical-trial-agent .
 ```bash
 docker run --rm --env-file .env clinical-trial-agent
 
+
 ```
+
+---
+
+## License
+
+This project is licensed under the **MIT License**.
+---
