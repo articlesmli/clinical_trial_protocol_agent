@@ -1,0 +1,21 @@
+# Virtual Environment & Binaries
+bin/
+lib/
+include/
+share/
+.venv/
+env/
+venv/
+
+# Environment Variables & Secrets
+.env
+
+# Python Caches & Build Files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Local protocol PDFs (optional: keep if you want to track sample PDFs)
+# protocols/*.pdf
