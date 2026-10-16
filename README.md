@@ -120,4 +120,3 @@ docker run --rm --env-file .env clinical-trial-agent
 ## License
 
 This project is licensed under the **MIT License**.
----
