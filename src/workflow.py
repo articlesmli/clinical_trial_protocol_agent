@@ -1,54 +1,50 @@
-from langchain_core.messages import AIMessage
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph
 from src.schemas import ProtocolState
-from src.tools import extract_pdf_text_real, vector_db_query_real
+from src.guardrails import ProtocolGuardrails
+from src.evaluation import ProductionEvaluator
 
-def extract_protocol_node(state: ProtocolState):
-    print("--- STEP 1: PARSING REAL PDF PROTOCOL ---")
-    result = extract_pdf_text_real(state["pdf_path"])
-    
-    # Safely extract and combine criteria lists
-    inc = getattr(result, "inclusion_criteria", []) or []
-    exc = getattr(result, "exclusion_criteria", []) or []
-    combined_criteria = list(inc) + list(exc)
-    
-    return {
-        "extracted_criteria": combined_criteria,
-        "messages": [AIMessage(content=f"Extracted {len(combined_criteria)} criteria items.")]
-    }
+# DO NOT instantiate ProductionEvaluator globally here anymore
 
-def vector_search_node(state: ProtocolState):
-    print("--- STEP 2: QUERYING CHROMADB VECTOR STORE ---")
-    results = vector_db_query_real(state.get("extracted_criteria", []))
-    
-    return {
-        "search_results": results,
-        "messages": [AIMessage(content=f"Retrieved {len(results)} relevant precedents from ChromaDB.")]
-    }
+def extractor_node(state: ProtocolState) -> ProtocolState:
+    """Placeholder or execution node for protocol parsing."""
+    return state
 
-def validate_compliance_node(state: ProtocolState):
-    print("--- STEP 3: VALIDATING COMPLIANCE ---")
-    report = (
-        f"Compliance Analysis Complete (Production Mode with ChromaDB).\n"
-        f"Total Criteria Evaluated: {len(state.get('extracted_criteria', []))}\n"
-        f"ChromaDB Precedents Flagged: {len(state.get('search_results', []))}\n"
-        f"Status: PASSED - Ready for clinical review."
-    )
+def validator_node(state: ProtocolState) -> ProtocolState:
+    """LangGraph node enforcing guardrails and LLM-as-a-judge evaluation."""
+    criteria = state.get("criteria", {})
+    raw_source = state.get("raw_text", "")
     
-    return {
-        "compliance_report": report,
-        "messages": [AIMessage(content=report)]
-    }
+    # 1. Run Guardrails validation
+    inclusion_check = ProtocolGuardrails.validate_clinical_boundaries(criteria.get("inclusion_criteria", []))
+    exclusion_check = ProtocolGuardrails.validate_clinical_boundaries(criteria.get("exclusion_criteria", []))
+    
+    if not inclusion_check["passed"] or not exclusion_check["passed"]:
+        state["compliance_status"] = "FLAGGED_BY_GUARDRAILS"
+        return state
 
+    # 2. Run LLM-as-a-Judge Faithfulness Check (Initialized lazily here so env vars are loaded)
+    evaluator = ProductionEvaluator()
+    faithfulness_result = evaluator.evaluate_faithfulness(raw_source, criteria)
+    state["faithfulness_score"] = faithfulness_result.get("confidence_score", 1.0)
+    
+    if not faithfulness_result.get("is_faithful", True):
+        state["compliance_status"] = "FAILED_FAITHFULNESS_CHECK"
+    else:
+        state["compliance_status"] = "PASSED"
+        
+    return state
+
+# Initialize the LangGraph StateGraph
 workflow = StateGraph(ProtocolState)
 
-workflow.add_node("extractor", extract_protocol_node)
-workflow.add_node("vector_search", vector_search_node)
-workflow.add_node("validator", validate_compliance_node)
+# Add nodes to the graph
+workflow.add_node("extractor", extractor_node)
+workflow.add_node("validator", validator_node)
 
+# Set graph flow edges
 workflow.set_entry_point("extractor")
-workflow.add_edge("extractor", "vector_search")
-workflow.add_edge("vector_search", "validator")
-workflow.add_edge("validator", END)
+workflow.add_edge("extractor", "validator")
+workflow.set_finish_point("validator")
 
+# Compile the graph into 'app'
 app = workflow.compile()
