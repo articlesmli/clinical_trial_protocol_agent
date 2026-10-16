@@ -28,8 +28,8 @@ jobs:
       - name: Run Agent Pipeline Test (Mock/Dry Run)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          source .venv/bin/activate
           python main.py --pdf protocols/trial_protocol_104xb.pdf
 
       - name: Set up Docker Buildx
