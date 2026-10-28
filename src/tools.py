@@ -1,3 +1,4 @@
+# src/tools.py
 import os
 from pypdf import PdfReader
 from langchain_anthropic import ChatAnthropic
@@ -6,6 +7,7 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from src.schemas import CriteriaExtractionOutput
+from src.prompts import build_extraction_prompt, build_correction_prompt
 
 def parse_and_store_pdf_to_vectordb(pdf_path: str):
     """Parses PDF, chunks text, embeds it via HuggingFace, and stores in ChromaDB."""
@@ -42,42 +44,49 @@ def parse_and_store_pdf_to_vectordb(pdf_path: str):
     return vectorstore.as_retriever(search_kwargs={"k": 3})
 
 
-def extract_criteria_with_rag(pdf_path: str) -> CriteriaExtractionOutput:
-    """Orchestrates the RAG retrieval and Anthropic structured extraction."""
+def extract_criteria_with_rag(
+    pdf_path: str, 
+    therapeutic_area: str = "General", 
+    historical_examples: str = ""
+) -> tuple[CriteriaExtractionOutput, str]:
+    """Orchestrates the RAG retrieval and Anthropic structured extraction using dynamic prompting."""
     retriever = parse_and_store_pdf_to_vectordb(pdf_path)
     
     if not retriever:
-        # Fallback if PDF is missing
-        return CriteriaExtractionOutput(
+        fallback = CriteriaExtractionOutput(
             inclusion_criteria=["Age >= 18", "Confirmed Stage II/III NSCLC"],
             exclusion_criteria=["Prior immunotherapy", "Pregnancy"]
         )
+        return fallback, "Fallback static context"
     
-    # Retrieve relevant text chunks
     print("[Tool: RAG Retriever] Searching vector DB for inclusion/exclusion text...")
     relevant_docs = retriever.invoke("What are the patient inclusion and exclusion criteria?")
     context_text = "\n\n".join([doc.page_content for doc in relevant_docs])
     
     print(f"[Tool: RAG Retriever] Fetched {len(relevant_docs)} relevant text chunks.")
 
-    # Send retrieved chunks to Claude with Pydantic enforcement
     if os.getenv("ANTHROPIC_API_KEY"):
         try:
-            print("[Tool: LLM] Invoking Anthropic Claude with retrieved context...")
+            print("[Tool: LLM] Invoking Anthropic Claude with dynamically generated context prompt...")
             llm = ChatAnthropic(model="claude-sonnet-5-5")
             structured_llm = llm.with_structured_output(CriteriaExtractionOutput, method="json_schema")
             
-            prompt = f"Extract the patient inclusion and exclusion criteria strictly from the following clinical trial protocol text:\n\n{context_text}"
+            # Generate prompt dynamically
+            prompt = build_extraction_prompt(
+                context_text=context_text, 
+                therapeutic_area=therapeutic_area, 
+                historical_examples=historical_examples
+            )
             
             result = structured_llm.invoke(prompt)
             if result and (result.inclusion_criteria or result.exclusion_criteria):
-                print("[Tool: LLM] Successfully extracted criteria via RAG + Claude.")
-                return result
+                print("[Tool: LLM] Successfully extracted criteria via Dynamic RAG + Claude.")
+                return result, context_text
         except Exception as e:
             print(f"[Error] Anthropic LLM extraction failed: {e}. Falling back.")
 
-    # Final fallback mock data
-    return CriteriaExtractionOutput(
+    fallback_obj = CriteriaExtractionOutput(
         inclusion_criteria=["Age >= 18 years at time of consent", "Confirmed Stage II/III NSCLC"],
         exclusion_criteria=["Prior immunotherapy", "Active brain metastases"]
     )
+    return fallback_obj, context_text
