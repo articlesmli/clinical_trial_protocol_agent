@@ -1,6 +1,6 @@
 # Clinical Trial Protocol Agent
 
-An asynchronous multi-tool agent framework built with **LangGraph**, **Pydantic**, **Anthropic Claude 3.5 Sonnet / 5.5**, **ChromaDB**, and **Sentence Transformers** designed to parse dense clinical trial protocols, extract patient inclusion/exclusion criteria, enforce strict safety guardrails, evaluate output faithfulness, and run compliance audits.
+An asynchronous multi-tool agent framework built with **LangGraph**, **Pydantic**, **Anthropic Claude 3.5 Sonnet / 5.5**, **ChromaDB**, and **Sentence Transformers** designed to parse dense clinical trial protocols, extract patient inclusion/exclusion criteria, enforce strict safety guardrails, evaluate output faithfulness, and execute downstream AI-powered patient-trial eligibility matching.
 
 ---
 
@@ -13,6 +13,8 @@ clinical_trial_protocol_agent/          # Project root folder & Virtual Environm
   │       └── ci-cd.yml                 # GitHub Actions CI/CD pipeline automation
   ├── protocols/                        # Directory for input clinical trial PDFs
   │   └── trial_protocol_104xb.pdf
+  ├── data/                             # Persistent storage directory
+  │   └── indexed_trials.json           # Saved structured clinical trial records
   ├── src/                              # Source code package
   │   ├── __init__.py
   │   ├── schemas.py                    # Pydantic models & state definitions (`CriteriaExtractionOutput`, `ProtocolState`)
@@ -20,43 +22,60 @@ clinical_trial_protocol_agent/          # Project root folder & Virtual Environm
   │   ├── tools.py                      # PDF parsing (`pypdf`), Anthropic extraction (`claude-sonnet-5-5`), & ChromaDB vector search
   │   ├── guardrails.py                 # Clinical boundary validation & input sanitisation
   │   ├── evaluation.py                 # LLM-as-a-judge faithfulness scoring & production telemetry
-  │   └── workflow.py                   # LangGraph stateful nodes and graph compilation (`extractor` -> `vector_search` -> `validator`)
+  │   ├── database.py                   # Persistent JSON storage layer and keyword search engine
+  │   ├── matching_engine.py            # AI-powered patient eligibility evaluation using Claude & structured output
+  │   └── workflow.py                   # LangGraph stateful nodes and graph compilation (`extractor` -> `validator` -> `corrector` -> `downstream_indexer`)
   ├── .env                              # Environment variables (`ANTHROPIC_API_KEY`, `HF_TOKEN`)
   ├── .gitignore                        # Files to ignore (bin/, lib/, __pycache__, .env)
   ├── Dockerfile                        # Multi-stage containerisation blueprint for production deployment
   ├── requirements.txt                  # Project dependencies with version pinning & sentence-transformers
-  ├── main.py                           # Entry point script to run the agent pipeline
+  ├── main.py                           # Entry point script running Phase 1 (Extraction Workflow) & Phase 2 (Patient Matching)
   ├── LICENSE                           # MIT License file
   └── README.md                         # Project documentation
+
 ```
 
 ---
 
 ## Key Components
 
-* **`src/schemas.py`**: Defines the shared state schema (`ProtocolState`) and structured Pydantic models (`CriteriaExtractionOutput`) for reliable LLM parsing.
-* **`src/prompts.py`**: Houses dynamic prompt engineering utilities. Offers specialised baseline knowledge templates for specific therapeutic fields (Oncology and Cardiology) alongside structured formatting recipes for self-correction loops.
-* **`src/tools.py`**: Implements real PDF extraction via `pypdf`, criteria extraction using Anthropic's model via JSON schema structured outputs, and semantic similarity search over historical trial precedents using `ChromaDB`, Hugging Face embeddings, and `sentence-transformers`.
+* **`src/schemas.py`**: Defines the shared state schema (`ProtocolState`) and structured Pydantic models (`CriteriaExtractionOutput`, `PatientMatchOutput`) for reliable LLM parsing.
+* **`src/prompts.py`**: Houses dynamic prompt engineering utilities. Offers specialised baseline knowledge templates for specific therapeutic fields alongside structured formatting recipes for self-correction loops.
+* **`src/tools.py`**: Implements real PDF extraction via `pypdf`, criteria extraction using Anthropic's model via JSON schema structured outputs, and semantic similarity search over historical trial precedents using `ChromaDB`.
 * **`src/guardrails.py`**: Enforces clinical safety constraints, boundary checks, and input sanitisation to ensure patient safety and protocol adherence.
 * **`src/evaluation.py`**: Leverages Anthropic Claude as a judge to measure factual faithfulness, prevent hallucinations, and track vector distance telemetry.
-* **`src/workflow.py`**: Configures the stateful LangGraph workflow, orchestrating sequential execution nodes from parsing to vector retrieval and compliance reporting.
-* **`Dockerfile`**: Provides a secure, optimised multi-stage Python 3.10 runtime container image with non-privileged user execution.
+* **`src/database.py`**: Handles persistent disk-based CRUD operations and fast keyword-based searching across indexed protocol criteria (`data/indexed_trials.json`).
+* **`src/matching_engine.py`**: Evaluates real patient profiles against stored trial protocols using Claude 3.5 Sonnet structured output to determine eligibility status, rationales, and violated criteria.
+* **`src/workflow.py`**: Configures the stateful LangGraph workflow, orchestrating execution from extraction through validation, automated self-correction, and automatic downstream database indexing.
+
+
+* **`Dockerfile`**: Provides a secure, optimised multi-stage Python runtime container image.
 * **`.github/workflows/ci-cd.yml`**: Automates multi-stage build tests and validation checks via GitHub Actions.
-* **`main.py`**: The clean executable command-line interface entry point that sets up the graph and prints the final clinical compliance report.
+* **`main.py`**: The clean executable command-line interface entry point that runs the extraction pipeline (Phase 1) and immediately chains it into the AI patient-matching engine (Phase 2).
 
 ---
 
+## Advanced Architecture: Two-Phase Pipeline & Reflection
 
-## Advanced Architecture: Dynamic Prompts & Reflection
+The framework utilises an adaptive layout spanning protocol ingestion and downstream clinical intelligence:
 
-The framework utilises an adaptive routing layout designed for high-accuracy medical extraction tasks:
-### 1. Therapeutic Specialisation:
-The pipeline tailors extraction instructions based on runtime data parameters (e.g., loading specialised rules for RECIST staging or LVEF boundaries).
-### 2. Context-Aware Few-Shots:
-Historical trial exemplars are dynamically gathered from ChromaDB and appended directly to the input string context.
-### 3. Self-Correction (Critique Loop): 
-If guardrails find safety rule violations or the evaluation engine detects factual discrepancies, LangGraph triggers a fallback route to a correction node, dynamically re-prompting the LLM with full structural trace reports.
+### Phase 1: Ingestion & Self-Correction Workflow
 
+1. **Therapeutic Specialisation & RAG:** The pipeline extracts text dynamically and pulls relevant historical context via ChromaDB.
+
+
+2. **Guardrails & Evaluation:** Extracted criteria are tested against clinical boundaries and checked for factual faithfulness.
+3. **Self-Correction (Critique Loop):** If validation fails, LangGraph triggers a feedback loop back to the corrector node to re-prompt the LLM with error telemetry.
+
+
+4. **Persistent Indexing:** Successfully validated protocols are automatically written to disk via `database.py`.
+
+### Phase 2: AI Patient Eligibility Matching
+
+1. **Structured Retrieval:** Pulls verified trial inclusion and exclusion rules from persistent storage.
+2. **LLM-Driven Screening:** Cross-references complex patient profiles against protocol specifications using Pydantic structured outputs to produce clear eligibility determinations, decision rationales, and violation flags.
+
+---
 
 ## Getting Started
 
@@ -66,12 +85,14 @@ If guardrails find safety rule violations or the evaluation engine detects factu
 python3.10 -m venv .
 source bin/activate  # On Windows: Scripts\activate
 pip install --upgrade pip
+
 ```
 
 ### 2. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
+
 ```
 
 ### 3. Configure Environment Variables
@@ -81,12 +102,14 @@ Create a root **`.env`** file and add your credentials:
 ```env
 ANTHROPIC_API_KEY=sk-ant-usr-...
 HF_TOKEN=hf_your_hugging_face_token_here
+
 ```
 
-### 4. Run the Agent Locally
+### 4. Run the End-to-End Agent Locally
 
 ```bash
 python main.py --pdf protocols/trial_protocol_104xb.pdf
+
 ```
 
 ---
@@ -99,12 +122,14 @@ To run the agent fully sandboxed inside a secure **Docker container**:
 
 ```bash
 docker build -t clinical-trial-agent .
+
 ```
 
 ### 2. Run the Containerised Agent
 
 ```bash
 docker run --rm --env-file .env clinical-trial-agent
+
 ```
 
 ---
@@ -112,3 +137,5 @@ docker run --rm --env-file .env clinical-trial-agent
 ## License
 
 This project is licensed under the **MIT License**.
+
+```
