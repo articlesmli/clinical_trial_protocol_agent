@@ -3,7 +3,7 @@ import json
 from typing import Dict, Any
 from pydantic import BaseModel, Field
 from langchain_anthropic import ChatAnthropic
-from database import TrialDatabase
+from .database import TrialDatabase
 
 class PatientMatchOutput(BaseModel):
     eligibility_status: str = Field(description="Must be 'ELIGIBLE', 'INELIGIBLE', or 'UNCLEAR/REQUIRES_REVIEW'")
