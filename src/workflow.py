@@ -7,6 +7,10 @@ from src.evaluation import ProductionEvaluator
 from src.tools import extract_criteria_with_rag
 from src.prompts import build_correction_prompt
 from langchain_anthropic import ChatAnthropic
+from src.database import TrialDatabase  # <-- Updated to database layer
+
+# Initialize the persistent database instance
+global_trial_database = TrialDatabase()
 
 def extractor_node(state: ProtocolState) -> ProtocolState:
     """Parses text dynamically using therapeutic fields and RAG context states."""
@@ -73,7 +77,7 @@ def corrector_node(state: ProtocolState) -> ProtocolState:
     
     if os.getenv("ANTHROPIC_API_KEY"):
         try:
-            llm = ChatAnthropic(model="claude-sonnet-5-5")
+            llm = ChatAnthropic(model="claude-3-5-sonnet-20241022")
             structured_llm = llm.with_structured_output(CriteriaExtractionOutput, method="json_schema")
             
             # Dynamic revision prompt generation
@@ -96,13 +100,28 @@ def corrector_node(state: ProtocolState) -> ProtocolState:
             
     return state
 
+def downstream_indexer_node(state: ProtocolState) -> ProtocolState:
+    """Pushes verified, high-quality structured criteria into the downstream persistent database."""
+    if state.get("compliance_status") == "PASSED":
+        trial_id = state.get("trial_id", "NCT_104XB")
+        title = state.get("trial_title", "Clinical Trial Protocol 104XB")
+        criteria = state.get("criteria", {})
+        
+        global_trial_database.add_trial(
+            trial_id=trial_id,
+            title=title,
+            structured_criteria=criteria
+        )
+        print(f"[Node: Indexer] Successfully indexed verified trial {trial_id} into downstream database!")
+        
+    return state
+
 def routing_edge(state: ProtocolState):
     """Evaluates validation state and returns target edge node names."""
     status = state.get("compliance_status")
-    # If it failed guardrails or faithfulness check, route it into corrector
     if status in ["FLAGGED_BY_GUARDRAILS", "FAILED_FAITHFULNESS_CHECK"]:
         return "corrector"
-    return END
+    return "downstream_indexer"
 
 # Initialize the LangGraph StateGraph
 workflow = StateGraph(ProtocolState)
@@ -111,6 +130,7 @@ workflow = StateGraph(ProtocolState)
 workflow.add_node("extractor", extractor_node)
 workflow.add_node("validator", validator_node)
 workflow.add_node("corrector", corrector_node)
+workflow.add_node("downstream_indexer", downstream_indexer_node)
 
 # Set up flow control rules
 workflow.set_entry_point("extractor")
@@ -122,12 +142,15 @@ workflow.add_conditional_edges(
     routing_edge,
     {
         "corrector": "corrector",
-        END: END
+        "downstream_indexer": "downstream_indexer"
     }
 )
 
 # Loop corrector adjustments straight back to validator to ensure quality control
 workflow.add_edge("corrector", "validator")
+
+# Once indexed by the downstream system, finish workflow
+workflow.add_edge("downstream_indexer", END)
 
 # Compile graph into application object
 app = workflow.compile()

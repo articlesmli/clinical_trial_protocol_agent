@@ -1,0 +1,12 @@
+[
+  {
+    "trial_id": "NCT_TEST_001",
+    "title": "Test Clinical Protocol",
+    "inclusion_criteria": [
+      "Age >= 18 years"
+    ],
+    "exclusion_criteria": [
+      "Prior malignancy within 5 years"
+    ]
+  }
+]
