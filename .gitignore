@@ -6,6 +6,7 @@ share/
 .venv/
 env/
 venv/
+chroma_db/
 
 # Environment Variables & Secrets
 .env
