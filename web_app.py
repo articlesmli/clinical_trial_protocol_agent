@@ -3,6 +3,9 @@ import shutil
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 
+# Import the compiled LangGraph workflow directly from its source module
+from src.workflow import app as agent_app
+
 app = FastAPI(title="Clinical Trial Protocol Agent UI")
 
 UPLOAD_DIR = "protocols"
@@ -26,10 +29,8 @@ async def upload_protocol(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
     
-    # 2. Trigger the agent / RAG workflow
+    # 2. Trigger the agent / RAG workflow using the active imported agent_app
     try:
-        from main import app as agent_app
-        
         initial_state = {"pdf_path": file_path}
         final_state = agent_app.invoke(initial_state)
         
