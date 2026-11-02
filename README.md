@@ -1,6 +1,6 @@
 # Clinical Trial Protocol Agent
 
-An asynchronous multi-tool agent framework built with **FastAPI**, **LangGraph**, **Pydantic**, **Anthropic Claude**, **ChromaDB**, and **Sentence Transformers** designed to parse dense clinical trial protocols, extract patient inclusion/exclusion criteria, enforce strict safety guardrails, evaluate output faithfulness, and execute downstream AI-powered patient-trial eligibility matching through both a CLI and an interactive web UI.
+An asynchronous multi-tool agent framework built with **FastAPI**, **LangGraph**, **Pydantic**, **Anthropic Claude**, **ChromaDB**, and **Sentence Transformers** designed to parse dense clinical trial protocols, extract patient inclusion/exclusion criteria, enforce strict safety guardrails, evaluate output faithfulness, orchestrate **human-in-the-loop (HITL) clinical reviews**, and execute downstream AI-powered patient-trial eligibility matching through both a CLI and an interactive web UI.
 
 ---
 
@@ -23,15 +23,16 @@ clinical_trial_protocol_agent/          # Project root folder & Virtual Environm
   │   ├── evaluation.py                 # LLM-as-a-judge faithfulness scoring & production telemetry
   │   ├── database.py                   # Persistent JSON storage layer and keyword search engine
   │   ├── matching_engine.py            # AI-powered patient eligibility evaluation using Claude & structured output
-  │   └── workflow.py                   # LangGraph stateful nodes and graph compilation
+  │   └── workflow.py                   # LangGraph stateful nodes, human review gating, and graph compilation
   ├── .env                              # Environment variables (`ANTHROPIC_API_KEY`, `HF_TOKEN`)
   ├── .gitignore                        # Files to ignore
   ├── Dockerfile                        # Multi-stage containerisation blueprint for production deployment
   ├── requirements.txt                  # Project dependencies with version pinning & sentence-transformers
   ├── run_agent.py                      # CLI entry point running Phase 1 (Extraction Workflow) & Phase 2 (Patient Matching)
-  ├── web_app.py                        # FastAPI web interface application for browser-based PDF uploads & RAG execution
+  ├── web_app.py                        # FastAPI web interface application for browser-based uploads, RAG execution, and HITL endpoints
   ├── LICENSE                           # MIT License file
   └── README.md                         # Project documentation
+
 
 ```
 
@@ -39,35 +40,36 @@ clinical_trial_protocol_agent/          # Project root folder & Virtual Environm
 
 ## Key Components
 
-* **`src/schemas.py`**: Defines the shared state schema (`ProtocolState`) and structured Pydantic models (`CriteriaExtractionOutput`, `PatientMatchOutput`) for reliable LLM parsing.
+* **`src/schemas.py`**: Defines the shared state schema (`ProtocolState` including `review_status` and `reviewer_notes`) and structured Pydantic models (`CriteriaExtractionOutput`, `PatientMatchOutput`).
 * **`src/prompts.py`**: Houses dynamic prompt engineering utilities and specialized baseline knowledge templates.
 * **`src/tools.py`**: Implements real PDF extraction via `pypdf`, criteria extraction using Anthropic's model via JSON schema structured outputs, and semantic similarity search over historical trial precedents using `ChromaDB`.
 * **`src/guardrails.py`**: Enforces clinical safety constraints, boundary checks, and input sanitisation to ensure patient safety and protocol adherence.
 * **`src/evaluation.py`**: Leverages Anthropic Claude as a judge to measure factual faithfulness, prevent hallucinations, and track vector distance telemetry.
 * **`src/database.py`**: Handles persistent disk-based CRUD operations and fast keyword-based searching across indexed protocol criteria (`data/indexed_trials.json`).
 * **`src/matching_engine.py`**: Evaluates real patient profiles against stored trial protocols using Claude structured output to determine eligibility status, rationales, and violated criteria.
-* **`src/workflow.py`**: Configures the stateful LangGraph workflow, orchestrating execution from extraction through validation, automated self-correction, and automatic downstream database indexing.
-* **`web_app.py`**: FastAPI server providing a robust browser-based upload interface (`/upload-and-analyze/`) and interactive Swagger UI documentation.
+* **`src/workflow.py`**: Configures the stateful LangGraph workflow, orchestrating execution from extraction through validation, automated self-correction, **human clinical review gating**, and automatic downstream database indexing.
+* **`web_app.py`**: FastAPI server providing browser-based upload endpoints (`/upload-and-analyze/`), pending review tracking (`/protocols/pending-reviews`), clinical sign-off processing (`/protocols/{trial_id}/review`), and interactive Swagger UI documentation.
 * **`Dockerfile`**: Provides a secure, optimised multi-stage Python runtime container image.
 * **`.github/workflows/ci-cd.yml`**: Automates multi-stage build tests and validation checks via GitHub Actions.
 * **`run_agent.py`**: The clean executable command-line interface entry point that runs the extraction pipeline (Phase 1) and immediately chains it into the AI patient-matching engine (Phase 2).
 
 ---
 
-## Advanced Architecture: Two-Phase Pipeline & Reflection
+## Advanced Architecture: Two-Phase Pipeline, Reflection & Human-in-the-Loop Review
 
 The framework utilises an adaptive layout spanning protocol ingestion, web-based interaction, and downstream clinical intelligence:
 
-### Phase 1: Ingestion & Self-Correction Workflow
+### Phase 1: Ingestion, Self-Correction & Clinical Review Workflow
 
 1. **Therapeutic Specialisation & RAG:** The pipeline extracts text dynamically and pulls relevant historical context via ChromaDB.
 2. **Guardrails & Evaluation:** Extracted criteria are tested against clinical boundaries and checked for factual faithfulness.
-3. **Self-Correction (Critique Loop):** If validation fails, LangGraph triggers a feedback loop back to the corrector node to re-prompt the LLM with error telemetry.
-4. **Persistent Indexing:** Successfully validated protocols are automatically written to disk via `database.py`.
+3. **Self-Correction (Critique Loop):** If automated validation fails, LangGraph triggers a feedback loop back to the corrector node to re-prompt the LLM with error telemetry.
+4. **Human-in-the-Loop (HITL) Review:** Once automated checks pass, the workflow pauses at the `human_review` node (`PENDING_HUMAN_REVIEW`), allowing licensed clinicians to inspect and sign off on criteria via FastAPI endpoints.
+5. **Persistent Indexing:** Approved protocols are automatically committed to disk via `database.py`.
 
 ### Phase 2: AI Patient Eligibility Matching
 
-1. **Structured Retrieval:** Pulls verified trial inclusion and exclusion rules from persistent storage.
+1. **Structured Retrieval:** Pulls verified and human-approved trial inclusion and exclusion rules from persistent storage.
 2. **LLM-Driven Screening:** Cross-references complex patient profiles against protocol specifications using Pydantic structured outputs to produce clear eligibility determinations, decision rationales, and violation flags.
 
 ---
@@ -81,13 +83,15 @@ python3.10 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install --upgrade pip
 
+
 ```
 
 ### 2. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
-pip install fastapi uvicorn python-multipart
+pip install fastapi uvicorn python-multipart python-dotenv
+
 
 ```
 
@@ -99,6 +103,7 @@ Create a root **`.env`** file and add your credentials:
 ANTHROPIC_API_KEY=sk-ant-api03-...
 HF_TOKEN=hf_your_hugging_face_token_here
 
+
 ```
 
 ### 4. Run via Command Line (CLI)
@@ -106,18 +111,24 @@ HF_TOKEN=hf_your_hugging_face_token_here
 ```bash
 python run_agent.py --pdf protocols/trial_protocol_104xb.pdf
 
+
 ```
 
-### 5. Run via Web Interface (FastAPI)
+### 5. Run via Web Interface (FastAPI & HITL Review)
 
 Start the FastAPI server:
 
 ```bash
 python web_app.py
 
+
 ```
 
-Then, open your browser and navigate to **`http://127.0.0.1:8000/docs`** to access the interactive Swagger UI where researchers can upload protocol PDFs and trigger the RAG pipeline directly.
+Then, open your browser and navigate to **`http://127.0.0.1:8000/docs`** to access the interactive Swagger UI where researchers can:
+
+* Upload protocol PDFs (`POST /upload-and-analyze/`)
+* Check pending clinical reviews (`GET /protocols/pending-reviews`)
+* Submit clinical approvals or rejections (`POST /protocols/{trial_id}/review`)
 
 ---
 
@@ -130,12 +141,14 @@ To run the agent fully sandboxed inside a secure **Docker container**:
 ```bash
 docker build -t clinical-trial-agent .
 
+
 ```
 
 ### 2. Run the Containerised Agent
 
 ```bash
 docker run --rm --env-file .env clinical-trial-agent
+
 
 ```
 
