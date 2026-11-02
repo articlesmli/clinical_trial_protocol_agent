@@ -26,4 +26,4 @@ jobs:
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
           .venv/bin/pip install -r requirements.txt
-          .venv/bin/python main.py --pdf protocols/trial_protocol_104xb.pdf
+          .venv/bin/python run_agent.py --pdf protocols/trial_protocol_104xb.pdf
