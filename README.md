@@ -1,3 +1,6 @@
+Here is the updated `README.md` containing the new **📈 Future Roadmap** section added near the end of the file:
+
+```markdown
 # Clinical Trial Protocol Agent
 
 An asynchronous multi-tool agent framework built with **FastAPI**, **LangGraph**, **Pydantic**, **Anthropic Claude**, **ChromaDB**, and **Sentence Transformers** designed to parse dense clinical trial protocols, extract patient inclusion/exclusion criteria, enforce strict safety guardrails, evaluate output faithfulness, orchestrate **human-in-the-loop (HITL) clinical reviews**, and execute downstream AI-powered patient-trial eligibility matching through both a CLI and an interactive web UI.
@@ -32,7 +35,6 @@ clinical_trial_protocol_agent/          # Project root folder & Virtual Environm
   ├── web_app.py                        # FastAPI web interface application for browser-based uploads, RAG execution, and HITL endpoints
   ├── LICENSE                           # MIT License file
   └── README.md                         # Project documentation
-
 
 ```
 
@@ -83,7 +85,6 @@ python3.10 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install --upgrade pip
 
-
 ```
 
 ### 2. Install Dependencies
@@ -91,7 +92,6 @@ pip install --upgrade pip
 ```bash
 pip install -r requirements.txt
 pip install fastapi uvicorn python-multipart python-dotenv
-
 
 ```
 
@@ -103,14 +103,12 @@ Create a root **`.env`** file and add your credentials:
 ANTHROPIC_API_KEY=sk-ant-api03-...
 HF_TOKEN=hf_your_hugging_face_token_here
 
-
 ```
 
 ### 4. Run via Command Line (CLI)
 
 ```bash
 python run_agent.py --pdf protocols/trial_protocol_104xb.pdf
-
 
 ```
 
@@ -120,7 +118,6 @@ Start the FastAPI server:
 
 ```bash
 python web_app.py
-
 
 ```
 
@@ -141,7 +138,6 @@ To run the agent fully sandboxed inside a secure **Docker container**:
 ```bash
 docker build -t clinical-trial-agent .
 
-
 ```
 
 ### 2. Run the Containerised Agent
@@ -149,11 +145,27 @@ docker build -t clinical-trial-agent .
 ```bash
 docker run --rm --env-file .env clinical-trial-agent
 
-
 ```
+
+---
+
+## Future Roadmap
+
+To optimise the PENDING_HUMAN_REVIEW bottleneck over time, the human-in-the-loop gate will be used to collect a gold-standard dataset, which will then be used to deploy specialised AI agents that pre-screen the data before it ever reaches the human reviewer. Thus, the human reviewers will become more efficient, and the automation becomes more precise.
+
+When this data collection process runs over months, it will create a structured "Audit Trail and Feedback Dataset" of JSON objects containing the primary parts: the Context, the Discrepancy (Before vs. After), and the Root Cause.
+
+Once hundreds of these logs are collected, it will be possible to generate a Performance Dashboard that exposes systematic flaws in the primary extraction pipeline:
+### The Error Heatmap
+A statistical breakdown showing exactly where the primary AI agent struggles.
+### The Edge-Case Repository
+A curated list of highly complex medical paragraphs that the AI agent repeatedly misinterprets.
+### The "Gold Standard" Evaluation Set
+A collection of 100% human-vetted protocol extractions.
 
 ---
 
 ## License
 
 This project is licensed under the **MIT License**.
+
