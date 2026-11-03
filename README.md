@@ -153,11 +153,11 @@ To optimise the PENDING_HUMAN_REVIEW bottleneck over time, the human-in-the-loop
 When this data collection process runs over months, it will create a structured "Audit Trail and Feedback Dataset" of JSON objects containing the primary parts: the Context, the Discrepancy (Before vs. After), and the Root Cause.
 
 Once hundreds of these logs are collected, it will be possible to generate a Performance Dashboard that exposes systematic flaws in the primary extraction pipeline:
-### The Error Heatmap
+### 1. The Error Heatmap
 A statistical breakdown showing exactly where the primary AI agent struggles.
-### The Edge-Case Repository
+### 2. The Edge-Case Repository
 A curated list of highly complex medical paragraphs that the AI agent repeatedly misinterprets.
-### The "Gold Standard" Evaluation Set
+### 3. The "Gold Standard" Evaluation Set
 A collection of 100% human-vetted protocol extractions.
 
 ---
