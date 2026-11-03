@@ -1,6 +1,3 @@
-Here is the updated `README.md` containing the new **📈 Future Roadmap** section added near the end of the file:
-
-```markdown
 # Clinical Trial Protocol Agent
 
 An asynchronous multi-tool agent framework built with **FastAPI**, **LangGraph**, **Pydantic**, **Anthropic Claude**, **ChromaDB**, and **Sentence Transformers** designed to parse dense clinical trial protocols, extract patient inclusion/exclusion criteria, enforce strict safety guardrails, evaluate output faithfulness, orchestrate **human-in-the-loop (HITL) clinical reviews**, and execute downstream AI-powered patient-trial eligibility matching through both a CLI and an interactive web UI.
